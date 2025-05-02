@@ -2,56 +2,49 @@ name: CI & Deploy
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]  # или master, если у тебя так
+
+env:
+  IMAGE_NAME: akulov1/myapp   # замени на свой Docker Hub-репозиторий (если пушишь туда)
 
 jobs:
-  build-test-deploy:
+  build-push-test-deploy:
     runs-on: ubuntu-latest
 
     steps:
+      # 1) Checkout
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Build dev image (with tests)
-        run: docker build --target builder -t myapp:dev .
+      # 2) Build Docker image
+      - name: Build image
+        run: |
+          docker build -t $IMAGE_NAME:$GITHUB_SHA .
 
-      - name: Save dev image to tar
-        run: docker save myapp:dev -o myapp_dev.tar
+      # 4) Run tests inside container
+      - name: Run tests
+        run: |
+          docker run --rm $IMAGE_NAME:$GITHUB_SHA pytest tests
 
-      - name: Build prod image
-        run: docker build -t myapp:latest .
-
-      - name: Save prod image to tar
-        run: docker save myapp:latest -o myapp_latest.tar
-
-      - name: Set up SSH agent
+      # 5) Deploy to remote server via Podman
+      - name: Set up SSH
         uses: webfactory/ssh-agent@v0.5.4
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Copy images to server
-        run: |
-          scp -P ${{ secrets.SSH_PORT }} myapp_dev.tar ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~
-          scp -P ${{ secrets.SSH_PORT }} myapp_latest.tar ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~
-
-      - name: Run tests on remote server
-        run: |
-          ssh -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
-            podman load -i myapp_dev.tar
-            podman run --rm --network host myapp:dev pytest tests
-          EOF
-
       - name: Deploy to remote server
-        if: ${{ success() }}
         run: |
-          ssh -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
-            podman load -i myapp_latest.tar
-            podman stop myapp || true
-            podman rm myapp   || true
-            podman run -d \
-              --name myapp \
-              --network host \
-              myapp:latest \
-              uvicorn src.main:app --host 0.0.0.0 --port 8096
-          EOF
+          # Сохраняем и передаём образ на сервер
+          docker save $IMAGE_NAME:$GITHUB_SHA | \
+            ssh -o StrictHostKeyChecking=no \
+                -p ${{ secrets.SSH_PORT }} \
+                ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+            "podman load && \
+             podman stop myapp || true && \
+             podman rm myapp   || true && \
+             podman tag $IMAGE_NAME:$GITHUB_SHA myapp:latest && \
+             podman run -d \
+               --name myapp \
+               --network host \
+               myapp:latest \
+               uvicorn src.main:app --host 0.0.0.0 --port 8096"
