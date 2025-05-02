@@ -43,7 +43,12 @@ jobs:
         run: docker build --target builder -t myapp:test .
 
       - name: Run tests
-        run: docker run --rm --network host myapp:test pytest tests
+        run: |
+          docker run --rm \
+            --network host \
+            -e PYTHONPATH=/app \
+            myapp:test \
+            pytest tests
 
 
       - name: Build prod image
