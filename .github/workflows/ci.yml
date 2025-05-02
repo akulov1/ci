@@ -11,6 +11,16 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+          # Вставьте сразу после Checkout
+      - name: Debug network connectivity
+        run: |
+                echo "Resolving ${{ secrets.SSH_HOST }}..."
+                nslookup ${{ secrets.SSH_HOST }} || true
+                echo "Pinging ${{ secrets.SSH_HOST }} (5 пакетов)..."
+                ping -c 5 ${{ secrets.SSH_HOST }} || true
+                echo "Checking TCP port ${{ secrets.SSH_PORT }}..."
+                apt-get update && apt-get install -y --no-install-recommends netcat
+                nc -zv ${{ secrets.SSH_HOST }} ${{ secrets.SSH_PORT }} || true
 
       - name: Build dev image (with tests)
         run: docker build --target builder -t myapp:dev .
