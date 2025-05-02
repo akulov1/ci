@@ -1,3 +1,2 @@
 	asdasdasdasd
 	Asdasd
-фы
