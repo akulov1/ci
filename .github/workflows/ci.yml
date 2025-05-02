@@ -2,7 +2,7 @@ name: CI & Deploy
 
 on:
   push:
-    branches: [main]  # или master, если у тебя так
+    branches: [main]
 
 jobs:
   build-push-test-deploy:
@@ -16,12 +16,12 @@ jobs:
       # 2) Build Docker image
       - name: Build image
         run: |
-          docker build -t $IMAGE_NAME:$GITHUB_SHA .
+          docker build -t $IMAGE_NAME .
 
       # 4) Run tests inside container
       - name: Run tests
         run: |
-          docker run --rm $IMAGE_NAME:$GITHUB_SHA pytest tests
+          docker run --rm $IMAGE_NAME pytest tests
 
       # 5) Deploy to remote server via Podman
       - name: Set up SSH
@@ -32,7 +32,7 @@ jobs:
       - name: Deploy to remote server
         run: |
           # Сохраняем и передаём образ на сервер
-          docker save $IMAGE_NAME:$GITHUB_SHA | \
+          docker save $IMAGE_NAME | \
             ssh -o StrictHostKeyChecking=no \
                 -p ${{ secrets.SSH_PORT }} \
                 ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
