@@ -4,9 +4,6 @@ on:
   push:
     branches: [main]  # или master, если у тебя так
 
-env:
-  IMAGE_NAME: akulov1/myapp   # замени на свой Docker Hub-репозиторий (если пушишь туда)
-
 jobs:
   build-push-test-deploy:
     runs-on: ubuntu-latest
