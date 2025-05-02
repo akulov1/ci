@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+
 jobs:
   build-test-deploy:
     runs-on: ubuntu-latest
@@ -22,25 +23,34 @@ jobs:
 
       - name: Save prod image to tar
         run: docker save myapp:latest -o myapp_latest.tar
-      # 5) Deploy to remote server via Podman
-      - name: Set up SSH
+
+      - name: Set up SSH agent
         uses: webfactory/ssh-agent@v0.5.4
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Deploy to remote server
+      - name: Copy images to server
         run: |
-          # Сохраняем и передаём образ на сервер
-          docker save myapp:latest | \
-            ssh -o StrictHostKeyChecking=no \
-                -p ${{ secrets.SSH_PORT }} \
-                ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
-            "podman load && \
-             podman stop myapp || true && \
-             podman rm myapp   || true && \
-             podman tag myapp:latest myapp:latest && \
-             podman run -d \
-               --name myapp \
-               --network host \
-               myapp:latest \
-               uvicorn src.main:app --host 0.0.0.0 --port 8096"
+          scp -P ${{ secrets.SSH_PORT }} myapp_dev.tar ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~
+          scp -P ${{ secrets.SSH_PORT }} myapp_latest.tar ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~
+
+      - name: Run tests on remote server
+        run: |
+          ssh -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+            podman load -i myapp_dev.tar
+            podman run --rm --network host myapp:dev pytest tests
+          EOF
+
+      - name: Deploy to remote server
+        if: ${{ success() }}
+        run: |
+          ssh -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+            podman load -i myapp_latest.tar
+            podman stop myapp || true
+            podman rm myapp   || true
+            podman run -d \
+              --name myapp \
+              --network host \
+              myapp:latest \
+              uvicorn src.main:app --host 0.0.0.0 --port 8096
+          EOF
