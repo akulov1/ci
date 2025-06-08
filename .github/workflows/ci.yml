@@ -36,9 +36,6 @@ jobs:
       - name: Initialize DB from dump
         run: psql postgresql://kubsu:kubsu@localhost:5432/kubsu -f kubsu/dump.sql
 
-      - name: Build Docker image
-        run: docker build -t myapp:test .
-
       - name: Build test image
         run: docker build --target builder -t myapp:test .
 
